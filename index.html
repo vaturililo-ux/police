@@ -1310,100 +1310,222 @@ svg.leaflet-image-layer.leaflet-interactive path {
     }
 
     // ─────────────────────────────────────────────
-    // שמירת מסך + שיתוף
+    // שמירת מסך + שיתוף — כרטיס ויזואלי
     // ─────────────────────────────────────────────
 
-    function saveScreenshot() {
-        const box = document.getElementById('resultsBox');
-        const arteryName = document.getElementById('arteryName').value.trim();
+    function buildShareCard(arteryName) {
+        // Gather all data
+        const lat1 = document.getElementById('lat1').value;
+        const lon1 = document.getElementById('lon1').value;
+        const alt1 = document.getElementById('alt1').value;
+        const lat2 = document.getElementById('lat2').value;
+        const lon2 = document.getElementById('lon2').value;
+        const alt2 = document.getElementById('alt2').value;
+        const dist = document.getElementById('resDistance').innerText;
+        const az12 = document.getElementById('resAzimuth12').innerText;
+        const az21 = document.getElementById('resAzimuth21').innerText;
+        const elev = document.getElementById('resElevationDiff').innerText;
+        const tilt = document.getElementById('resTilt').innerText;
+        const los  = document.getElementById('resLOS').innerText;
+        const now  = new Date().toLocaleString('he-IL');
 
-        // Build canvas manually from DOM data
+        const W = 480, PAD = 18, RADIUS = 16;
+        const MAP_H = 200;
+        const BOX_H = 180;
+        const CARD_H = 60 + (arteryName ? 52 : 0) + MAP_H + 20 + BOX_H + 36;
+
         const canvas = document.createElement('canvas');
-        const scale = 2;
-        const width = Math.min(box.offsetWidth, 480);
-        canvas.width = width * scale;
-        canvas.height = 600 * scale;
+        const S = 2;
+        canvas.width  = W * S;
+        canvas.height = CARD_H * S;
         const ctx = canvas.getContext('2d');
-        ctx.scale(scale, scale);
+        ctx.scale(S, S);
 
-        // Background
-        ctx.fillStyle = '#ebf5fb';
-        ctx.beginPath();
-        ctx.roundRect(0, 0, width, 600, 10);
+        // Card background
+        ctx.fillStyle = '#1a2a3a';
+        roundRect(ctx, 0, 0, W, CARD_H, RADIUS);
         ctx.fill();
 
-        // Blue side border
-        ctx.fillStyle = '#2980b9';
-        ctx.fillRect(0, 0, 5, 600);
+        let y = 18;
 
-        // Header
-        ctx.fillStyle = '#2c3e50';
-        ctx.font = 'bold 15px Arial';
+        // ── Artery name row ──
+        if (arteryName) {
+            ctx.fillStyle = '#2d4a6a';
+            roundRect(ctx, PAD, y, W - PAD*2, 36, 8);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 15px Arial';
+            ctx.textAlign = 'right';
+            ctx.direction = 'rtl';
+            ctx.fillText('📌 ' + arteryName, W - PAD - 8, y + 24);
+            y += 52;
+        }
+
+        // ── Map snapshot ──
+        ctx.save();
+        roundRect(ctx, PAD, y, W - PAD*2, MAP_H, 12);
+        ctx.clip();
+        ctx.fillStyle = '#2980b9';
+        ctx.fillRect(PAD, y, W - PAD*2, MAP_H);
+
+        // Try to snapshot the leaflet map
+        const mapEl = document.getElementById('mapPanel');
+        const mapCanvas = mapEl ? mapEl.querySelector('canvas') : null;
+        if (mapCanvas) {
+            try {
+                ctx.drawImage(mapCanvas, PAD, y, W - PAD*2, MAP_H);
+            } catch(e) {
+                drawMapPlaceholder(ctx, PAD, y, W - PAD*2, MAP_H, lat1, lon1, lat2, lon2);
+            }
+        } else {
+            drawMapPlaceholder(ctx, PAD, y, W - PAD*2, MAP_H, lat1, lon1, lat2, lon2);
+        }
+        ctx.restore();
+        y += MAP_H + 14;
+
+        // ── Two boxes row ──
+        const BOX_W = (W - PAD*2 - 10) / 2;
+
+        // Left box: תוצאות חישוב
+        ctx.fillStyle = '#2d4a6a';
+        roundRect(ctx, PAD, y, BOX_W, BOX_H, 10);
+        ctx.fill();
+
+        ctx.fillStyle = '#7fb3d3';
+        ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'right';
         ctx.direction = 'rtl';
+        ctx.fillText('תוצאות חישוב', PAD + BOX_W - 10, y + 20);
 
-        let y = 30;
-        const lh = 42;
-
-        // Title
-        if (arteryName) {
-            ctx.fillStyle = '#2980b9';
-            ctx.font = 'bold 16px Arial';
-            ctx.fillText('📌 ' + arteryName, width - 14, y);
-            y += lh;
-            ctx.fillStyle = '#ccc';
-            ctx.fillRect(14, y - 14, width - 28, 1);
-            y += 8;
-        }
-
-        ctx.fillStyle = '#2c3e50';
-        ctx.font = '14px Arial';
-
-        const fields = [
-            ['📏 מרחק אווירי', document.getElementById('resDistance').innerText],
-            ["➡️ אזימוט א'←ב'", document.getElementById('resAzimuth12').innerText],
-            ["⬅️ אזימוט ב'←א'", document.getElementById('resAzimuth21').innerText],
-            ['⛰️ ניתוח גבהים', document.getElementById('resElevationDiff').innerText],
-            ['📐 זווית שיפוע', document.getElementById('resTilt').innerText],
-            ['👁️ קו ראייה (LOS)', document.getElementById('resLOS').innerText],
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px Arial';
+        const resLines = [
+            ['מרחק', dist],
+            ["אז' א'→ב'", az12],
+            ["אז' ב'→א'", az21],
+            ['שיפוע', tilt],
+            ['LOS', los],
         ];
-
-        for (const [label, value] of fields) {
-            ctx.fillStyle = '#555';
-            ctx.font = '13px Arial';
-            ctx.fillText(label + ':', width - 14, y);
-            ctx.fillStyle = '#2c3e50';
-            ctx.font = 'bold 14px Arial';
-            ctx.fillText(value, width - 14, y + 17);
-            y += lh;
-            ctx.fillStyle = '#d6e4f0';
-            ctx.fillRect(14, y - 8, width - 28, 1);
+        let ry = y + 36;
+        for (const [label, val] of resLines) {
+            ctx.fillStyle = '#8ab4cc';
+            ctx.font = '10px Arial';
+            ctx.fillText(label + ':', PAD + BOX_W - 10, ry);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11px Arial';
+            ctx.fillText(val, PAD + BOX_W - 10, ry + 13);
+            ry += 27;
         }
 
-        // Footer timestamp
-        const now = new Date().toLocaleString('he-IL');
-        ctx.fillStyle = '#999';
-        ctx.font = '11px Arial';
-        ctx.fillText('נוצר: ' + now, width - 14, y + 10);
+        // Right box: נתוני פתיחה
+        const RX = PAD + BOX_W + 10;
+        ctx.fillStyle = '#2d4a6a';
+        roundRect(ctx, RX, y, BOX_W, BOX_H, 10);
+        ctx.fill();
 
-        // Trim canvas to actual content
-        const finalCanvas = document.createElement('canvas');
-        finalCanvas.width = canvas.width;
-        finalCanvas.height = (y + 30) * scale;
-        const fctx = finalCanvas.getContext('2d');
-        fctx.drawImage(canvas, 0, 0);
+        ctx.fillStyle = '#7fb3d3';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'right';
+        ctx.direction = 'rtl';
+        ctx.fillText('נתוני פתיחה', RX + BOX_W - 10, y + 20);
 
-        finalCanvas.toBlob(blob => {
+        ctx.fillStyle = '#ffffff';
+        const openLines = [
+            ["עמוד א'", `${parseFloat(lat1).toFixed(5)}, ${parseFloat(lon1).toFixed(5)}`],
+            ['גובה א'', alt1 ? alt1 + ' מ'': '-'],
+            ["עמוד ב'", `${parseFloat(lat2).toFixed(5)}, ${parseFloat(lon2).toFixed(5)}`],
+            ['גובה ב'', alt2 ? alt2 + ' מ'': '-'],
+            ['גבהים', elev.length > 30 ? elev.slice(0,28)+'…' : elev],
+        ];
+        let oy = y + 36;
+        for (const [label, val] of openLines) {
+            ctx.fillStyle = '#8ab4cc';
+            ctx.font = '10px Arial';
+            ctx.fillText(label + ':', RX + BOX_W - 10, oy);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11px Arial';
+            ctx.fillText(val, RX + BOX_W - 10, oy + 13);
+            oy += 27;
+        }
+
+        y += BOX_H + 8;
+
+        // Footer
+        ctx.fillStyle = '#4a7a9b';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('VATURI • ' + now, W/2, y + 12);
+
+        return canvas;
+    }
+
+    function drawMapPlaceholder(ctx, x, y, w, h, lat1, lon1, lat2, lon2) {
+        // Gradient background as map placeholder
+        const grad = ctx.createLinearGradient(x, y, x+w, y+h);
+        grad.addColorStop(0, '#1a6688');
+        grad.addColorStop(1, '#0d4a66');
+        ctx.fillStyle = grad;
+        ctx.fillRect(x, y, w, h);
+
+        // Grid lines
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < w; i += 30) { ctx.beginPath(); ctx.moveTo(x+i,y); ctx.lineTo(x+i,y+h); ctx.stroke(); }
+        for (let i = 0; i < h; i += 30) { ctx.beginPath(); ctx.moveTo(x,y+i); ctx.lineTo(x+w,y+i); ctx.stroke(); }
+
+        // Draw line between points
+        const p1x = x + w*0.35, p1y = y + h*0.4;
+        const p2x = x + w*0.65, p2y = y + h*0.6;
+        ctx.strokeStyle = '#f39c12';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.moveTo(p1x,p1y); ctx.lineTo(p2x,p2y); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Pin A
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath(); ctx.arc(p1x, p1y, 7, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center';
+        ctx.fillText('א', p1x, p1y+3);
+
+        // Pin B
+        ctx.fillStyle = '#27ae60';
+        ctx.beginPath(); ctx.arc(p2x, p2y, 7, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText('ב', p2x, p2y+3);
+
+        // Coords
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.font = '9px Arial';
+        ctx.textAlign = 'left';
+        if (lat1 && lon1) ctx.fillText(parseFloat(lat1).toFixed(4)+', '+parseFloat(lon1).toFixed(4), p1x+10, p1y-4);
+        if (lat2 && lon2) ctx.fillText(parseFloat(lat2).toFixed(4)+', '+parseFloat(lon2).toFixed(4), p2x-80, p2y+14);
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x+r, y);
+        ctx.lineTo(x+w-r, y); ctx.arcTo(x+w,y, x+w,y+r, r);
+        ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w,y+h, x+w-r,y+h, r);
+        ctx.lineTo(x+r, y+h); ctx.arcTo(x,y+h, x,y+h-r, r);
+        ctx.lineTo(x, y+r); ctx.arcTo(x,y, x+r,y, r);
+        ctx.closePath();
+    }
+
+    function saveScreenshot() {
+        const arteryName = (document.getElementById('arteryName').value || '').trim();
+        const canvas = buildShareCard(arteryName);
+        canvas.toBlob(blob => {
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            const name = arteryName ? arteryName.replace(/[^א-תa-z0-9]/gi, '_').slice(0, 30) : 'vaturi';
+            const name = arteryName ? arteryName.replace(/[^\u05d0-\u05ea\w]/g, '_').slice(0,30) : 'vaturi';
             a.download = name + '_תוצאות.png';
             a.click();
         });
     }
 
     function shareResults() {
-        const arteryName = document.getElementById('arteryName').value.trim();
+        const arteryName = (document.getElementById('arteryName').value || '').trim();
         const lines = [];
         if (arteryName) lines.push('📌 ' + arteryName);
         lines.push('📏 מרחק: ' + document.getElementById('resDistance').innerText);
@@ -1414,12 +1536,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
         lines.push('👁️ LOS: ' + document.getElementById('resLOS').innerText);
         lines.push('🔗 ' + window.location.href);
         const text = lines.join('\n');
-
         const msg = document.getElementById('shareMsg');
 
         if (navigator.share) {
             navigator.share({ title: arteryName || 'תוצאות VATURI', text })
-                .then(() => { msg.style.display='block'; msg.textContent='✓ שותף בהצלחה'; setTimeout(()=>msg.style.display='none', 3000); })
+                .then(() => { msg.style.display='block'; msg.textContent='✓ שותף בהצלחה'; setTimeout(()=>msg.style.display='none',3000); })
                 .catch(() => copyToClipboard(text, msg));
         } else {
             copyToClipboard(text, msg);
@@ -1428,22 +1549,16 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
     function copyToClipboard(text, msgEl) {
         navigator.clipboard.writeText(text).then(() => {
-            msgEl.style.display = 'block';
-            msgEl.textContent = '✓ הטקסט הועתק ללוח — ניתן להדביק בוואטסאפ / מייל';
-            setTimeout(() => msgEl.style.display = 'none', 4000);
+            msgEl.style.display='block';
+            msgEl.textContent='✓ הועתק ללוח — ניתן להדביק בוואטסאפ / מייל';
+            setTimeout(()=>msgEl.style.display='none', 4000);
         }).catch(() => {
-            // fallback for older browsers
             const ta = document.createElement('textarea');
-            ta.value = text;
-            ta.style.position = 'fixed';
-            ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
+            ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+            document.body.appendChild(ta); ta.select(); document.execCommand('copy');
             document.body.removeChild(ta);
-            msgEl.style.display = 'block';
-            msgEl.textContent = '✓ הועתק ללוח';
-            setTimeout(() => msgEl.style.display = 'none', 3000);
+            msgEl.style.display='block'; msgEl.textContent='✓ הועתק ללוח';
+            setTimeout(()=>msgEl.style.display='none',3000);
         });
     }
 </script>
