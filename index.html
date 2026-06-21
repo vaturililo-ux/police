@@ -981,12 +981,22 @@ svg.leaflet-image-layer.leaflet-interactive path {
     </div>
 
     <div class="results" id="resultsBox">
+        <div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px dashed #d6e4f0;">
+            <label style="font-size:13px;color:#555;display:block;margin-bottom:4px;">📌 שם העורק / תיאור:</label>
+            <input type="text" id="arteryName" placeholder="לדוגמה: כביש 375 — ירושלים–בית שמש"
+                style="width:100%;padding:8px 10px;border:1.5px solid #c0d8ee;border-radius:6px;font-size:14px;box-sizing:border-box;font-family:inherit;direction:rtl;">
+        </div>
         <p>📏 <b>מרחק אווירי:</b> <span class="highlight" id="resDistance">-</span></p>
         <p>➡️ <b>אזימוט מעמוד א' לעמוד ב':</b> <span class="highlight" id="resAzimuth12">-</span></p>
         <p>⬅️ <b>אזימוט מעמוד ב' לעמוד א':</b> <span class="highlight" id="resAzimuth21">-</span></p>
         <p>⛰️ <b>ניתוח גבהים:</b> <span class="elevation-info" id="resElevationDiff">-</span></p>
         <p>📐 <b>זווית שיפוע (אלבציה):</b> <span class="highlight" id="resTilt">-</span></p>
         <p>👁️ <b>קו ראייה טופוגרפי (LOS):</b> <br><span id="resLOS" class="los-status">-</span></p>
+        <div style="display:flex;gap:10px;margin-top:14px;">
+            <button onclick="saveScreenshot()" style="flex:1;padding:10px;background:#2980b9;color:white;border:none;border-radius:6px;font-size:14px;font-weight:bold;cursor:pointer;">📸 שמירת מסך</button>
+            <button onclick="shareResults()" style="flex:1;padding:10px;background:#27ae60;color:white;border:none;border-radius:6px;font-size:14px;font-weight:bold;cursor:pointer;">🔗 שיתוף תוצאה</button>
+        </div>
+        <div id="shareMsg" style="display:none;margin-top:8px;padding:7px 10px;background:#d4edda;color:#155724;border-radius:5px;font-size:13px;text-align:center;"></div>
     </div>
 
     <div id="mapPanel">
