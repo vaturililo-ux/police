@@ -1368,60 +1368,64 @@ svg.leaflet-image-layer.leaflet-interactive path {
             roundRect(ctx, MX, MY, MW, MH, 12);
             ctx.clip();
 
-            // Compute tile for center between points
             const clat = (parseFloat(lat1) + parseFloat(lat2)) / 2;
             const clon = (parseFloat(lon1) + parseFloat(lon2)) / 2;
-            // Compute zoom so both points fit with padding
-            function latToTileY(lat, z) {
-                const latR = lat * Math.PI / 180;
-                return (1 - Math.log(Math.tan(latR) + 1/Math.cos(latR)) / Math.PI) / 2 * Math.pow(2, z);
+            const tileSize = 256, R = 2;
+
+            function tX(lon, z) { return (lon + 180) / 360 * Math.pow(2, z); }
+            function tY(lat, z) {
+                const r = parseFloat(lat) * Math.PI / 180;
+                return (1 - Math.log(Math.tan(r) + 1/Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z);
             }
-            function lonToTileX(lon, z) { return (lon + 180) / 360 * Math.pow(2, z); }
 
-            const lat1f = parseFloat(lat1), lon1f = parseFloat(lon1);
-            const lat2f = parseFloat(lat2), lon2f = parseFloat(lon2);
-            const tileSize = 256;
-            const R = 2; // tile radius (5x5 grid)
-
-            // Find zoom where both points fit within the tile grid with margin
+            // Auto zoom: fit both points in 65% of card area
             let zoom = 15;
             for (let z = 15; z >= 10; z--) {
-                const tx1 = lonToTileX(lon1f, z), ty1 = latToTileY(lat1f, z);
-                const tx2 = lonToTileX(lon2f, z), ty2 = latToTileY(lat2f, z);
-                const cTx = lonToTileX(clon, z), cTy = latToTileY(clat, z);
-                // pixel distance from center tile
-                const pxSpanX = Math.abs(tx1 - tx2) * tileSize;
-                const pxSpanY = Math.abs(ty1 - ty2) * tileSize;
-                if (pxSpanX < MW * 0.7 && pxSpanY < MH * 0.7) { zoom = z; break; }
+                if (Math.abs(tX(parseFloat(lon1),z)-tX(parseFloat(lon2),z))*tileSize < MW*0.65 &&
+                    Math.abs(tY(parseFloat(lat1),z)-tY(parseFloat(lat2),z))*tileSize < MH*0.65) {
+                    zoom = z; break;
+                }
             }
 
-            const cTileX = Math.floor(lonToTileX(clon, zoom));
-            const cTileY = Math.floor(latToTileY(clat, zoom));
-            // offX/offY = canvas position of top-left corner of tile grid
-            const offX = MX + MW/2 - tileSize * (R + lonToTileX(clon, zoom) - cTileX);
-            const offY = MY + MH/2 - tileSize * (R + latToTileY(clat, zoom) - cTileY);
+            const cTX = Math.floor(tX(clon, zoom));
+            const cTY = Math.floor(tY(clat, zoom));
+            const fracX = tX(clon, zoom) - cTX;
+            const fracY = tY(clat, zoom) - cTY;
+            const offX = MX + MW/2 - (R + fracX) * tileSize;
+            const offY = MY + MH/2 - (R + fracY) * tileSize;
 
-            const total = (R*2+1) * (R*2+1);
             let loaded = 0;
+            const total = (R*2+1) * (R*2+1);
 
-            for (let dx = -R; dx <= R; dx++) {
-                for (let dy = -R; dy <= R; dy++) {
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous';
-                    const tx = dx, ty = dy;
-                    img.onload = () => {
-                        ctx.drawImage(img, offX + (tx+R)*tileSize, offY + (ty+R)*tileSize, tileSize, tileSize);
-                        loaded++;
-                        if (loaded === total) {
-                            drawPinsOnMap(ctx, MX, MY, MW, MH, clat, clon, zoom, lat1, lon1, lat2, lon2, tileSize, offX, offY, cTileX, cTileY);
-                            ctx.restore();
-                            y += MH + 14;
-                            resolve();
-                        }
-                    };
-                    img.onerror = () => { loaded++; if (loaded === total) { ctx.restore(); y += MH + 14; resolve(); } };
-                    img.src = `https://tile.openstreetmap.org/${zoom}/${cTileX+tx}/${cTileY+ty}.png`;
+            function finish() {
+                function toXY(lat, lon) {
+                    return [
+                        offX + (tX(parseFloat(lon), zoom) - (cTX - R)) * tileSize,
+                        offY + (tY(parseFloat(lat), zoom) - (cTY - R)) * tileSize
+                    ];
                 }
+                const [p1x,p1y] = toXY(lat1, lon1);
+                const [p2x,p2y] = toXY(lat2, lon2);
+                ctx.strokeStyle='#f39c12'; ctx.lineWidth=3; ctx.setLineDash([8,5]);
+                ctx.beginPath(); ctx.moveTo(p1x,p1y); ctx.lineTo(p2x,p2y); ctx.stroke();
+                ctx.setLineDash([]);
+                [[p1x,p1y,'#e74c3c','א'],[p2x,p2y,'#27ae60','ב']].forEach(([px,py,col,lbl])=>{
+                    ctx.fillStyle=col; ctx.beginPath(); ctx.arc(px,py,11,0,Math.PI*2); ctx.fill();
+                    ctx.fillStyle='#fff'; ctx.font='bold 13px Arial';
+                    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(lbl,px,py);
+                });
+                ctx.textBaseline='alphabetic';
+                ctx.restore();
+                y += MH + 14;
+                resolve();
+            }
+
+            for (let dx=-R; dx<=R; dx++) for (let dy=-R; dy<=R; dy++) {
+                const img=new Image(), _dx=dx, _dy=dy;
+                img.crossOrigin='anonymous';
+                img.onload=()=>{ ctx.drawImage(img,offX+(_dx+R)*tileSize,offY+(_dy+R)*tileSize,tileSize,tileSize); if(++loaded===total) finish(); };
+                img.onerror=()=>{ if(++loaded===total) finish(); };
+                img.src=`https://tile.openstreetmap.org/${zoom}/${cTX+dx}/${cTY+dy}.png`;
             }
         });
 
