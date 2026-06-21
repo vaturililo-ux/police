@@ -1313,7 +1313,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     // שמירת מסך + שיתוף — כרטיס ויזואלי
     // ─────────────────────────────────────────────
 
-    function buildShareCard(arteryName) {
+    async function buildShareCard(arteryName) {
         // Gather all data
         const lat1 = document.getElementById('lat1').value;
         const lon1 = document.getElementById('lon1').value;
@@ -1361,27 +1361,46 @@ svg.leaflet-image-layer.leaflet-interactive path {
             y += 52;
         }
 
-        // ── Map snapshot ──
-        ctx.save();
-        roundRect(ctx, PAD, y, W - PAD*2, MAP_H, 12);
-        ctx.clip();
-        ctx.fillStyle = '#2980b9';
-        ctx.fillRect(PAD, y, W - PAD*2, MAP_H);
+        // ── Map snapshot via static tile ──
+        await new Promise(resolve => {
+            const MX = PAD, MY = y, MW = W - PAD*2, MH = MAP_H;
+            ctx.save();
+            roundRect(ctx, MX, MY, MW, MH, 12);
+            ctx.clip();
 
-        // Try to snapshot the leaflet map
-        const mapEl = document.getElementById('mapPanel');
-        const mapCanvas = mapEl ? mapEl.querySelector('canvas') : null;
-        if (mapCanvas) {
-            try {
-                ctx.drawImage(mapCanvas, PAD, y, W - PAD*2, MAP_H);
-            } catch(e) {
-                drawMapPlaceholder(ctx, PAD, y, W - PAD*2, MAP_H, lat1, lon1, lat2, lon2);
+            // Compute tile for center between points
+            const clat = (parseFloat(lat1) + parseFloat(lat2)) / 2;
+            const clon = (parseFloat(lon1) + parseFloat(lon2)) / 2;
+            const zoom = 14;
+            const tileX = Math.floor((clon + 180) / 360 * Math.pow(2, zoom));
+            const tileY = Math.floor((1 - Math.log(Math.tan(clat * Math.PI/180) + 1/Math.cos(clat * Math.PI/180)) / Math.PI) / 2 * Math.pow(2, zoom));
+
+            // Load 3x3 tiles for context
+            let loaded = 0, total = 9;
+            const tileSize = 256;
+            const offX = MX + MW/2 - tileSize*1.5;
+            const offY = MY + MH/2 - tileSize*1.5;
+
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    const tx = dx, ty = dy;
+                    img.onload = () => {
+                        ctx.drawImage(img, offX + (tx+1)*tileSize, offY + (ty+1)*tileSize, tileSize, tileSize);
+                        loaded++;
+                        if (loaded === total) {
+                            drawPinsOnMap(ctx, MX, MY, MW, MH, clat, clon, zoom, lat1, lon1, lat2, lon2, tileSize, offX, offY);
+                            ctx.restore();
+                            y += MH + 14;
+                            resolve();
+                        }
+                    };
+                    img.onerror = () => { loaded++; if (loaded === total) { ctx.restore(); y += MH + 14; resolve(); } };
+                    img.src = `https://tile.openstreetmap.org/${zoom}/${tileX+tx}/${tileY+ty}.png`;
+                }
             }
-        } else {
-            drawMapPlaceholder(ctx, PAD, y, W - PAD*2, MAP_H, lat1, lon1, lat2, lon2);
-        }
-        ctx.restore();
-        y += MAP_H + 14;
+        });
 
         // ── Two boxes row ──
         const BOX_W = (W - PAD*2 - 10) / 2;
@@ -1502,6 +1521,38 @@ svg.leaflet-image-layer.leaflet-interactive path {
         if (lat2 && lon2) ctx.fillText(parseFloat(lat2).toFixed(4)+', '+parseFloat(lon2).toFixed(4), p2x-80, p2y+14);
     }
 
+    function drawPinsOnMap(ctx, MX, MY, MW, MH, clat, clon, zoom, lat1, lon1, lat2, lon2, tileSize, offX, offY) {
+        function latLonToPixel(lat, lon) {
+            const n = Math.pow(2, zoom);
+            const px = (parseFloat(lon) + 180) / 360 * n * tileSize - (offX - MX);
+            const latR = parseFloat(lat) * Math.PI / 180;
+            const py = (1 - Math.log(Math.tan(latR) + 1/Math.cos(latR)) / Math.PI) / 2 * n * tileSize - (offY - MY);
+            return [MX + px, MY + py];
+        }
+        const [p1x, p1y] = latLonToPixel(lat1, lon1);
+        const [p2x, p2y] = latLonToPixel(lat2, lon2);
+
+        // Line
+        ctx.strokeStyle = '#f39c12';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([8, 5]);
+        ctx.beginPath(); ctx.moveTo(p1x, p1y); ctx.lineTo(p2x, p2y); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Pin A
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath(); ctx.arc(p1x, p1y, 9, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('א', p1x, p1y);
+
+        // Pin B
+        ctx.fillStyle = '#27ae60';
+        ctx.beginPath(); ctx.arc(p2x, p2y, 9, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText('ב', p2x, p2y);
+        ctx.textBaseline = 'alphabetic';
+    }
+
     function roundRect(ctx, x, y, w, h, r) {
         ctx.beginPath();
         ctx.moveTo(x+r, y);
@@ -1514,14 +1565,13 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
     function saveScreenshot() {
         const arteryName = (document.getElementById('arteryName').value || '').trim();
-        const canvas = buildShareCard(arteryName);
-        canvas.toBlob(blob => {
+        buildShareCard(arteryName).then(canvas => canvas.toBlob(blob => {
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             const name = arteryName ? arteryName.replace(/[^\u05d0-\u05ea\w]/g, '_').slice(0,30) : 'vaturi';
             a.download = name + '_תוצאות.png';
             a.click();
-        });
+        }));
     }
 
     function shareResults() {
