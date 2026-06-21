@@ -1400,11 +1400,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
         ctx.fillStyle = '#ffffff';
         ctx.font = '12px Arial';
         const resLines = [
-            ['מרחק', dist],
-            ["אז' א'→ב'", az12],
-            ["אז' ב'→א'", az21],
-            ['שיפוע', tilt],
-            ['LOS', los],
+            ["מרחק", dist],
+            ["אז׳ א׳→ב׳", az12],
+            ["אז׳ ב׳→א׳", az21],
+            ["שיפוע", tilt],
+            ["LOS", los],
         ];
         let ry = y + 36;
         for (const [label, val] of resLines) {
@@ -1432,10 +1432,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
         ctx.fillStyle = '#ffffff';
         const openLines = [
             ["עמוד א'", `${parseFloat(lat1).toFixed(5)}, ${parseFloat(lon1).toFixed(5)}`],
-            ['גובה א'', alt1 ? alt1 + ' מ'': '-'],
+            ["גובה א'", alt1 ? alt1 + " מ'" : '-'],
             ["עמוד ב'", `${parseFloat(lat2).toFixed(5)}, ${parseFloat(lon2).toFixed(5)}`],
-            ['גובה ב'', alt2 ? alt2 + ' מ'': '-'],
-            ['גבהים', elev.length > 30 ? elev.slice(0,28)+'…' : elev],
+            ["גובה ב'", alt2 ? alt2 + " מ'" : '-'],
+            ["גבהים", elev.length > 30 ? elev.slice(0,28)+'…' : elev],
         ];
         let oy = y + 36;
         for (const [label, val] of openLines) {
