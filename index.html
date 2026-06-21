@@ -1298,6 +1298,144 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
         setTimeout(() => mapInstance.invalidateSize(), 100);
     }
+
+    // ─────────────────────────────────────────────
+    // שמירת מסך + שיתוף
+    // ─────────────────────────────────────────────
+
+    function saveScreenshot() {
+        const box = document.getElementById('resultsBox');
+        const arteryName = document.getElementById('arteryName').value.trim();
+
+        // Build canvas manually from DOM data
+        const canvas = document.createElement('canvas');
+        const scale = 2;
+        const width = Math.min(box.offsetWidth, 480);
+        canvas.width = width * scale;
+        canvas.height = 600 * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(scale, scale);
+
+        // Background
+        ctx.fillStyle = '#ebf5fb';
+        ctx.beginPath();
+        ctx.roundRect(0, 0, width, 600, 10);
+        ctx.fill();
+
+        // Blue side border
+        ctx.fillStyle = '#2980b9';
+        ctx.fillRect(0, 0, 5, 600);
+
+        // Header
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = 'bold 15px Arial';
+        ctx.textAlign = 'right';
+        ctx.direction = 'rtl';
+
+        let y = 30;
+        const lh = 42;
+
+        // Title
+        if (arteryName) {
+            ctx.fillStyle = '#2980b9';
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText('📌 ' + arteryName, width - 14, y);
+            y += lh;
+            ctx.fillStyle = '#ccc';
+            ctx.fillRect(14, y - 14, width - 28, 1);
+            y += 8;
+        }
+
+        ctx.fillStyle = '#2c3e50';
+        ctx.font = '14px Arial';
+
+        const fields = [
+            ['📏 מרחק אווירי', document.getElementById('resDistance').innerText],
+            ["➡️ אזימוט א'←ב'", document.getElementById('resAzimuth12').innerText],
+            ["⬅️ אזימוט ב'←א'", document.getElementById('resAzimuth21').innerText],
+            ['⛰️ ניתוח גבהים', document.getElementById('resElevationDiff').innerText],
+            ['📐 זווית שיפוע', document.getElementById('resTilt').innerText],
+            ['👁️ קו ראייה (LOS)', document.getElementById('resLOS').innerText],
+        ];
+
+        for (const [label, value] of fields) {
+            ctx.fillStyle = '#555';
+            ctx.font = '13px Arial';
+            ctx.fillText(label + ':', width - 14, y);
+            ctx.fillStyle = '#2c3e50';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText(value, width - 14, y + 17);
+            y += lh;
+            ctx.fillStyle = '#d6e4f0';
+            ctx.fillRect(14, y - 8, width - 28, 1);
+        }
+
+        // Footer timestamp
+        const now = new Date().toLocaleString('he-IL');
+        ctx.fillStyle = '#999';
+        ctx.font = '11px Arial';
+        ctx.fillText('נוצר: ' + now, width - 14, y + 10);
+
+        // Trim canvas to actual content
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = canvas.width;
+        finalCanvas.height = (y + 30) * scale;
+        const fctx = finalCanvas.getContext('2d');
+        fctx.drawImage(canvas, 0, 0);
+
+        finalCanvas.toBlob(blob => {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            const name = arteryName ? arteryName.replace(/[^א-תa-z0-9]/gi, '_').slice(0, 30) : 'vaturi';
+            a.download = name + '_תוצאות.png';
+            a.click();
+        });
+    }
+
+    function shareResults() {
+        const arteryName = document.getElementById('arteryName').value.trim();
+        const lines = [];
+        if (arteryName) lines.push('📌 ' + arteryName);
+        lines.push('📏 מרחק: ' + document.getElementById('resDistance').innerText);
+        lines.push("➡️ אזימוט א'→ב': " + document.getElementById('resAzimuth12').innerText);
+        lines.push("⬅️ אזימוט ב'→א': " + document.getElementById('resAzimuth21').innerText);
+        lines.push('⛰️ גבהים: ' + document.getElementById('resElevationDiff').innerText);
+        lines.push('📐 שיפוע: ' + document.getElementById('resTilt').innerText);
+        lines.push('👁️ LOS: ' + document.getElementById('resLOS').innerText);
+        lines.push('🔗 ' + window.location.href);
+        const text = lines.join('\n');
+
+        const msg = document.getElementById('shareMsg');
+
+        if (navigator.share) {
+            navigator.share({ title: arteryName || 'תוצאות VATURI', text })
+                .then(() => { msg.style.display='block'; msg.textContent='✓ שותף בהצלחה'; setTimeout(()=>msg.style.display='none', 3000); })
+                .catch(() => copyToClipboard(text, msg));
+        } else {
+            copyToClipboard(text, msg);
+        }
+    }
+
+    function copyToClipboard(text, msgEl) {
+        navigator.clipboard.writeText(text).then(() => {
+            msgEl.style.display = 'block';
+            msgEl.textContent = '✓ הטקסט הועתק ללוח — ניתן להדביק בוואטסאפ / מייל';
+            setTimeout(() => msgEl.style.display = 'none', 4000);
+        }).catch(() => {
+            // fallback for older browsers
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            msgEl.style.display = 'block';
+            msgEl.textContent = '✓ הועתק ללוח';
+            setTimeout(() => msgEl.style.display = 'none', 3000);
+        });
+    }
 </script>
 
 </body>
