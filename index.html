@@ -1371,40 +1371,56 @@ svg.leaflet-image-layer.leaflet-interactive path {
             // Compute tile for center between points
             const clat = (parseFloat(lat1) + parseFloat(lat2)) / 2;
             const clon = (parseFloat(lon1) + parseFloat(lon2)) / 2;
-            // Auto zoom: fit both points inside the map area
-            const dlat = Math.abs(parseFloat(lat1) - parseFloat(lat2));
-            const dlon = Math.abs(parseFloat(lon1) - parseFloat(lon2));
-            const maxDelta = Math.max(dlat, dlon);
-            let zoom = 14;
-            if (maxDelta > 0.05) zoom = 12;
-            else if (maxDelta > 0.02) zoom = 13;
-            else if (maxDelta < 0.005) zoom = 15;
-            const tileX = Math.floor((clon + 180) / 360 * Math.pow(2, zoom));
-            const tileY = Math.floor((1 - Math.log(Math.tan(clat * Math.PI/180) + 1/Math.cos(clat * Math.PI/180)) / Math.PI) / 2 * Math.pow(2, zoom));
+            // Compute zoom so both points fit with padding
+            function latToTileY(lat, z) {
+                const latR = lat * Math.PI / 180;
+                return (1 - Math.log(Math.tan(latR) + 1/Math.cos(latR)) / Math.PI) / 2 * Math.pow(2, z);
+            }
+            function lonToTileX(lon, z) { return (lon + 180) / 360 * Math.pow(2, z); }
 
-            // Load 3x3 tiles for context
-            let loaded = 0, total = 9;
+            const lat1f = parseFloat(lat1), lon1f = parseFloat(lon1);
+            const lat2f = parseFloat(lat2), lon2f = parseFloat(lon2);
             const tileSize = 256;
-            const offX = MX + MW/2 - tileSize*1.5;
-            const offY = MY + MH/2 - tileSize*1.5;
+            const R = 2; // tile radius (5x5 grid)
 
-            for (let dx = -1; dx <= 1; dx++) {
-                for (let dy = -1; dy <= 1; dy++) {
+            // Find zoom where both points fit within the tile grid with margin
+            let zoom = 15;
+            for (let z = 15; z >= 10; z--) {
+                const tx1 = lonToTileX(lon1f, z), ty1 = latToTileY(lat1f, z);
+                const tx2 = lonToTileX(lon2f, z), ty2 = latToTileY(lat2f, z);
+                const cTx = lonToTileX(clon, z), cTy = latToTileY(clat, z);
+                // pixel distance from center tile
+                const pxSpanX = Math.abs(tx1 - tx2) * tileSize;
+                const pxSpanY = Math.abs(ty1 - ty2) * tileSize;
+                if (pxSpanX < MW * 0.7 && pxSpanY < MH * 0.7) { zoom = z; break; }
+            }
+
+            const cTileX = Math.floor(lonToTileX(clon, zoom));
+            const cTileY = Math.floor(latToTileY(clat, zoom));
+            // offX/offY = canvas position of top-left corner of tile grid
+            const offX = MX + MW/2 - tileSize * (R + lonToTileX(clon, zoom) - cTileX);
+            const offY = MY + MH/2 - tileSize * (R + latToTileY(clat, zoom) - cTileY);
+
+            const total = (R*2+1) * (R*2+1);
+            let loaded = 0;
+
+            for (let dx = -R; dx <= R; dx++) {
+                for (let dy = -R; dy <= R; dy++) {
                     const img = new Image();
                     img.crossOrigin = 'anonymous';
                     const tx = dx, ty = dy;
                     img.onload = () => {
-                        ctx.drawImage(img, offX + (tx+1)*tileSize, offY + (ty+1)*tileSize, tileSize, tileSize);
+                        ctx.drawImage(img, offX + (tx+R)*tileSize, offY + (ty+R)*tileSize, tileSize, tileSize);
                         loaded++;
                         if (loaded === total) {
-                            drawPinsOnMap(ctx, MX, MY, MW, MH, clat, clon, zoom, lat1, lon1, lat2, lon2, tileSize, offX, offY);
+                            drawPinsOnMap(ctx, MX, MY, MW, MH, clat, clon, zoom, lat1, lon1, lat2, lon2, tileSize, offX, offY, cTileX, cTileY);
                             ctx.restore();
                             y += MH + 14;
                             resolve();
                         }
                     };
                     img.onerror = () => { loaded++; if (loaded === total) { ctx.restore(); y += MH + 14; resolve(); } };
-                    img.src = `https://tile.openstreetmap.org/${zoom}/${tileX+tx}/${tileY+ty}.png`;
+                    img.src = `https://tile.openstreetmap.org/${zoom}/${cTileX+tx}/${cTileY+ty}.png`;
                 }
             }
         });
@@ -1528,21 +1544,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
         if (lat2 && lon2) ctx.fillText(parseFloat(lat2).toFixed(4)+', '+parseFloat(lon2).toFixed(4), p2x-80, p2y+14);
     }
 
-    function drawPinsOnMap(ctx, MX, MY, MW, MH, clat, clon, zoom, lat1, lon1, lat2, lon2, tileSize, offX, offY) {
-        // offX/offY = canvas coords of top-left of tile grid (tile tileX-1, tileY-1)
-        // Convert lat/lon to absolute tile pixel coords, then offset by tile grid origin
+    function drawPinsOnMap(ctx, MX, MY, MW, MH, clat, clon, zoom, lat1, lon1, lat2, lon2, tileSize, offX, offY, cTileX, cTileY) {
         function latLonToPixel(lat, lon) {
             const n = Math.pow(2, zoom);
             const absX = (parseFloat(lon) + 180) / 360 * n * tileSize;
             const latR = parseFloat(lat) * Math.PI / 180;
             const absY = (1 - Math.log(Math.tan(latR) + 1/Math.cos(latR)) / Math.PI) / 2 * n * tileSize;
-            // tileX/tileY are the center tile; tile grid starts at tileX-1, tileY-1
-            const centerTileAbsX = Math.floor((clon + 180) / 360 * n) * tileSize;
-            const clatR = clat * Math.PI / 180;
-            const centerTileAbsY = Math.floor((1 - Math.log(Math.tan(clatR) + 1/Math.cos(clatR)) / Math.PI) / 2 * n) * tileSize;
-            // grid origin (top-left tile) absolute pixel
-            const gridOriginX = centerTileAbsX - tileSize;
-            const gridOriginY = centerTileAbsY - tileSize;
+            // grid origin = top-left tile absolute pixel position
+            const gridOriginX = cTileX * tileSize;
+            const gridOriginY = cTileY * tileSize;
             return [offX + (absX - gridOriginX), offY + (absY - gridOriginY)];
         }
         const [p1x, p1y] = latLonToPixel(lat1, lon1);
