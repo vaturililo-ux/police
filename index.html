@@ -1522,12 +1522,21 @@ svg.leaflet-image-layer.leaflet-interactive path {
     }
 
     function drawPinsOnMap(ctx, MX, MY, MW, MH, clat, clon, zoom, lat1, lon1, lat2, lon2, tileSize, offX, offY) {
+        // offX/offY = canvas coords of top-left of tile grid (tile tileX-1, tileY-1)
+        // Convert lat/lon to absolute tile pixel coords, then offset by tile grid origin
         function latLonToPixel(lat, lon) {
             const n = Math.pow(2, zoom);
-            const px = (parseFloat(lon) + 180) / 360 * n * tileSize - (offX - MX);
+            const absX = (parseFloat(lon) + 180) / 360 * n * tileSize;
             const latR = parseFloat(lat) * Math.PI / 180;
-            const py = (1 - Math.log(Math.tan(latR) + 1/Math.cos(latR)) / Math.PI) / 2 * n * tileSize - (offY - MY);
-            return [MX + px, MY + py];
+            const absY = (1 - Math.log(Math.tan(latR) + 1/Math.cos(latR)) / Math.PI) / 2 * n * tileSize;
+            // tileX/tileY are the center tile; tile grid starts at tileX-1, tileY-1
+            const centerTileAbsX = Math.floor((clon + 180) / 360 * n) * tileSize;
+            const clatR = clat * Math.PI / 180;
+            const centerTileAbsY = Math.floor((1 - Math.log(Math.tan(clatR) + 1/Math.cos(clatR)) / Math.PI) / 2 * n) * tileSize;
+            // grid origin (top-left tile) absolute pixel
+            const gridOriginX = centerTileAbsX - tileSize;
+            const gridOriginY = centerTileAbsY - tileSize;
+            return [offX + (absX - gridOriginX), offY + (absY - gridOriginY)];
         }
         const [p1x, p1y] = latLonToPixel(lat1, lon1);
         const [p2x, p2y] = latLonToPixel(lat2, lon2);
