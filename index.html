@@ -1371,7 +1371,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
             // Compute tile for center between points
             const clat = (parseFloat(lat1) + parseFloat(lat2)) / 2;
             const clon = (parseFloat(lon1) + parseFloat(lon2)) / 2;
-            const zoom = 14;
+            // Auto zoom: fit both points inside the map area
+            const dlat = Math.abs(parseFloat(lat1) - parseFloat(lat2));
+            const dlon = Math.abs(parseFloat(lon1) - parseFloat(lon2));
+            const maxDelta = Math.max(dlat, dlon);
+            let zoom = 14;
+            if (maxDelta > 0.05) zoom = 12;
+            else if (maxDelta > 0.02) zoom = 13;
+            else if (maxDelta < 0.005) zoom = 15;
             const tileX = Math.floor((clon + 180) / 360 * Math.pow(2, zoom));
             const tileY = Math.floor((1 - Math.log(Math.tan(clat * Math.PI/180) + 1/Math.cos(clat * Math.PI/180)) / Math.PI) / 2 * Math.pow(2, zoom));
 
